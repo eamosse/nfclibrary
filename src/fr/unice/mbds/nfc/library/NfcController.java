@@ -154,7 +154,7 @@ public class NfcController implements SEService.CallBack {
 		if(channel==null || channel.isClosed())
 		channel = openChannel();
 		for (String instruction : tabInstructions) {
-			byte[] command = setCommand(CLA, Byte.parseByte(instruction), tabvalues[iter],false);
+			byte[] command = prepareCommand(CLA, Byte.parseByte(instruction), tabvalues[iter],false);
 			try {
 				byte[] resp = channel.transmit(command);
 				System.out.println(resp[resp.length - 2]);
@@ -241,7 +241,7 @@ public class NfcController implements SEService.CallBack {
 				String data = null;
 				if (whereValues != null && (iter <= whereValues.length - 1))
 					data = whereValues[iter];
-				byte[] command = setCommand(CLA, Byte.parseByte(st), data, true);
+				byte[] command = prepareCommand(CLA, Byte.parseByte(st), data, true);
 				try {
 					byte[] resp = channel.transmit(command);
 					System.out.println(resp[resp.length - 2]);
@@ -292,7 +292,7 @@ public class NfcController implements SEService.CallBack {
 		this.appletAID = appletAID;
 	}
 
-	private byte[] setCommand(byte CLA, byte INS, String data, boolean lc) {
+	private byte[] prepareCommand(byte CLA, byte INS, String data, boolean lc) {
 		System.out.println("Data : " + data);
 		boolean hasData = data == null ? false : true;
 		byte[] dataByte = null;
