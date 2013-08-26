@@ -314,8 +314,6 @@ public class NfcController implements SEService.CallBack {
 			command[4] = (byte) dataByte.length;
 			System.arraycopy(dataByte, 0, command, 5, dataByte.length);
 		}
-		for (byte b : command)
-			System.out.println(b);
 		return command;
 	}
 
