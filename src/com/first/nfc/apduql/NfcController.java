@@ -247,8 +247,6 @@ public class NfcController implements SEService.CallBack {
 			String[] response = new String[commande.length()];
 			Applet applet = Configuration.currentApplet;
 	
-			int iter = 0;
-	
 			boolean isErrorOccurs = true;
 			channel = openChannel(applet);
 			// get data in the select command
