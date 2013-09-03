@@ -7,6 +7,7 @@ public class RequestParser {
 		// insert into applet (ins1,ins2) values(value1,value2)
 		commande = commande.replaceAll("\\s+", " ");
 		checkRequiredWords(commande, "insert", "into", "values");
+		
 
 		// get the applet name
 		String appletName = nextWord(commande, "into");
@@ -33,12 +34,14 @@ public class RequestParser {
 		Applet applet = Configuration.getAppletByName(appletName);
 
 		checkFieldsBelongToApplet(tabInstructions, applet);
+		if(!applet.getClasses().containsKey(Command.INSERT))
+			throw new BadRequestException("Request not supported! " + appletName + " doesn't support Insert command!" );
 
 		// get the values to be inserted
 		int indexValues = commande.indexOf("values");
 		String values = commande.substring(indexValues);
 		// values = values.substring(indexValues + 6).trim();
-		values = values.substring(values.indexOf("("), values.lastIndexOf(")"));
+		values = values.substring(values.indexOf("(")+1, values.lastIndexOf(")"));
 		System.out.println("Values " + values);
 
 		String[] tabvalues = values.split(",");
@@ -61,7 +64,7 @@ public class RequestParser {
 		for (String instruction : tabInstructions) {
 
 			byte[] command = setCommand(
-					applet.getClasses().get(Command.SELECT), applet
+					applet.getClasses().get(Command.INSERT), applet
 							.getInstructions().get(instruction),
 					tabvalues[iter], false);
 			cmds[iter] = command;
@@ -98,8 +101,10 @@ public class RequestParser {
 		Applet applet = Configuration.getAppletByName(appletName);
 		col = col.replaceAll("\\s", "");
 		String[] instructions = col.split(",");
+		System.out.println("Instruction " + col);
 		checkFieldsBelongToApplet(instructions, applet);
-
+		if(!applet.getClasses().containsKey(Command.SELECT))
+			throw new BadRequestException("Request not supported! " + appletName + " doesn't support Select command!" );
 		String[] whereValues = null;
 		int indexWhere = commande.indexOf("where");
 		if (indexWhere != -1) {
