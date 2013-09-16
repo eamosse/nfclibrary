@@ -1,7 +1,10 @@
 package com.first.nfc.apduql;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 
 import org.simalliance.openmobileapi.Channel;
@@ -21,13 +24,12 @@ public class NfcController implements SEService.CallBack {
 	ApduCallBack callback;
 
 	Channel channel;
+	Applet currentApplet;
 
 	public NfcController(Context context, ApduCallBack callback) {
-
 		this.callback = callback;
-
 		this.context = context;
-
+		Configuration.FILEDIRECTORY = context.getFilesDir();
 	}
 
 	/**
@@ -36,8 +38,7 @@ public class NfcController implements SEService.CallBack {
 	 */
 
 	public void sayHello(String appletName, int commandHelloId) {
-
-		String[] response = { "Hello" };
+		Map<String, Object> response = new HashMap<String, Object>();
 
 		try {
 			Applet applet = Configuration.getAppletByName(appletName);
@@ -46,10 +47,12 @@ public class NfcController implements SEService.CallBack {
 
 			byte[] hello = channel.getSelectResponse();
 
-			if (isResponseSucceded(hello))
-
+			if (ResponseHelper.isResponseSucceded(hello)) {
+				response.put("hello", "Applet is succesfully selected!");
 				callback.onResponse(response, commandHelloId);
-
+			} else {
+				callback.onNoApplet();
+			}
 		} catch (NoSuchElementException e) {
 
 			callback.onNoApplet();
@@ -66,6 +69,9 @@ public class NfcController implements SEService.CallBack {
 
 			callback.onNoSecureElement();
 
+		} catch (BadRequestException e) {
+			// TODO Auto-generated catch block
+			callback.onBadRequest(e.getMessage());
 		}
 
 	}
@@ -123,192 +129,98 @@ public class NfcController implements SEService.CallBack {
 
 	}
 
-	public void execute(String command, int commandId) {
-		// Let us be sure that we don't have unnecessary characters in the
-		// request (like blank space)
-		command.replaceAll("\\s+", " ");
-		System.out.println(command);
+	public void execute(final String command, final int commandId) {
+		new Thread(){
+			public void run(){
+		Map<String, Object> maps = null;
 		try {
 
 			if (command.startsWith("select")) {
-
-				performSelect(command, commandId);
-
+				maps = RequestParser.parseSelect(command);
 			} else if (command.startsWith("insert")) {
-
-				performInsert(command, commandId);
-
+				maps = RequestParser.parseInsert(command);
 			}
+			if (maps == null)
+				throw new BadRequestException("Command not supported!");
+			executeCommand(maps, commandId);
 
-		} catch (IOException e) {
-
-			callback.onIOException(e.getMessage());
-
-		} catch (NoReaderException e) {
-
-			callback.onNoReader();
-
-		} catch (NoSecureElementException e) {
-
+		} catch (BadRequestException ex) {
+			ex.printStackTrace();
+			callback.onBadRequest(ex.getMessage());
+		} catch (NoSuchElementException ex) {
+			ex.printStackTrace();
+			callback.onNoApplet();
+		} catch (NoSecureElementException ex) {
+			ex.printStackTrace();
 			callback.onNoSecureElement();
-
+		} catch (NoReaderException ex) {
+			ex.printStackTrace();
+			callback.onNoReader();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		} catch (Exception e) {
+			// TODO Auto-generated catch block
 			callback.onBadRequest(e.getMessage());
-			System.out.println(e.getMessage());
-
 		}
-
+			}
+		}.start();
 	}
 
-	private void performInsert(String commande, int commandId)
-			throws NoSuchElementException, IOException, NoReaderException,
-			NoSecureElementException, BadRequestException {
+	private void executeCommand(Map<String, Object> maps, int commandId)
+			throws BadRequestException, NoSecureElementException,
+			NoSuchElementException, NoReaderException, IOException {
+		// byte[][] commands = RequestParser.parseSelect(commande);
+		Map<String, Object> response = new HashMap<String, Object>();
+		Applet applet = null;
+		Object a = maps.get("applet");
 
-		byte[][] commands = RequestParser.parseInsert(commande);
-
-		Applet applet = Configuration.currentApplet;
-		for(byte b : applet.getAID())
-			System.out.println(b);
-		// open connection to the applet
-		channel = openChannel(applet);
-
-		String[] response = new String[commands.length];
+		if (a instanceof Applet) {
+			System.out.println("00000000000000000 " + a + " Test "
+					+ (a instanceof Applet));
+			applet = (Applet) a;
+		}
+		if (applet == null) {
+			callback.onNoApplet();
+			System.out.println("Ahhhhhhhhhh " + a + " Test "
+					+ (a instanceof Applet));
+			return;
+		}
 		boolean isErrorOccurs = true;
+		// channel = serviceConnected(applet);
+		// get data in the select command
+		channel = openChannel(applet);
+		byte[][] commands = (byte[][]) maps.get("command");
+		String[] fields = (String[]) maps.get("fields");
 		for (int i = 0; i < commands.length; i++) {
-
 			byte[] command = commands[i];
-
-			try {
-
-				byte[] resp = channel.transmit(command);
-
-				System.out.println(resp[resp.length - 2]);
-
-				System.out.println(resp[resp.length - 1]);
-
-				if (!isResponseSucceded(resp)) {
-
-					if (isPinRequired(resp)) {
-
-						callback.onPINRequired();
-
-					} else {
-
-						ApduError error = new ApduError("Wrong APDU response",
-
-						getResponseCode(resp));
-
-						callback.onAPDUError(error);
-
-					}
-
+			byte[] resp = sendCommand(command);
+			if (!ResponseHelper.isResponseSucceded(resp)) {
+				if (ResponseHelper.isPinRequired(resp)) {
+					callback.onPINRequired();
 				} else {
-
-					// String r = getResponseBody(resp);
-
-					response[i] = " OK ";
-
-					isErrorOccurs = false;
-
+					ApduError error = new ApduError("Wrong APDU response",
+							ResponseHelper.getResponseCode(resp));
+					callback.onAPDUError(error);
 				}
-
-			} catch (IOException e) {
-
-				callback.onIOException(e.getMessage());
-
-			} catch (NoSuchElementException e) {
-
-				callback.onNoApplet();
-
-			} catch (Exception e) {
-
-				System.out.println("Exception " + e.getMessage());
-
-				e.printStackTrace();
-
-			} finally {
-
-				if (isErrorOccurs)
-
-					break;
-
+			} else {
+				String r = ResponseHelper.getResponseBody(resp);
+				response.put(fields[i], r);
+				isErrorOccurs = false;
 			}
 
+			if (isErrorOccurs) {
+				break;
+			}
 		}
-
-		if (!isErrorOccurs)
+		if (!isErrorOccurs) {
 			callback.onResponse(response, commandId);
-
+		}
 	}
 
-		private void performSelect(String commande, int commandId) throws Exception {
-	
-			byte[][] commands = RequestParser.parseSelect(commande);
-			String[] response = new String[commande.length()];
-			Applet applet = Configuration.currentApplet;
-	
-			boolean isErrorOccurs = true;
-			channel = openChannel(applet);
-			// get data in the select command
-	
-			for (int i = 0; i < commands.length; i++) {
-	
-				byte[] command = commands[i];
-	
-				try {
-	
-					byte[] resp = channel.transmit(command);
-	
-					System.out.println(resp[resp.length - 2]);
-	
-					System.out.println(resp[resp.length - 1]);
-	
-					if (!isResponseSucceded(resp)) {
-	
-						if (isPinRequired(resp)) {
-	
-							callback.onPINRequired();
-	
-						} else {
-	
-							ApduError error = new ApduError(
-	
-							"Wrong APDU response",
-	
-							getResponseCode(resp));
-	
-							callback.onAPDUError(error);
-	
-						}
-	
-					} else {
-						String r = getResponseBody(resp);
-						response[i] = r;
-						isErrorOccurs = false;
-					}
-	
-				} catch (IOException e) {
-	
-					callback.onIOException(e.getMessage());
-	
-				} catch (NoSuchElementException e) {
-	
-					callback.onNoApplet();
-	
-				} finally {
-	
-					if (isErrorOccurs)
-	
-						break;
-				}
-			}
-	
-			if (!isErrorOccurs)
-	
-				callback.onResponse(response, commandId);
-		}
-
-
+	public byte[] sendCommand(byte[] command) throws IOException {
+		return channel.transmit(command);
+	}
 
 	public boolean isServiceConnected() {
 
@@ -354,13 +266,16 @@ public class NfcController implements SEService.CallBack {
 	}
 
 	private Channel openChannel(Applet applet) throws IOException,
-			NoSuchElementException, NoReaderException, NoSecureElementException {
+			NoSuchElementException, NoReaderException,
+			NoSecureElementException, BadRequestException {
 
 		// Check if a channel is opened
 		if (channel != null && !channel.isClosed()) {
 			// if a channel is already opened for this applet
-		
-			if (Configuration.currentApplet !=null && (applet.getNom().equalsIgnoreCase(Configuration.currentApplet.getNom())))
+
+			if (currentApplet != null
+					&& (applet.getName().equalsIgnoreCase(currentApplet
+							.getName())))
 				return channel;
 			else
 				// we must close the opened channel and open a new one for the
@@ -371,73 +286,28 @@ public class NfcController implements SEService.CallBack {
 		Reader reader = getPrincipalReader();
 
 		if (reader != null) {
-
 			Session session = getPrincipalReader().openSession();
-
-			for (byte b : applet.getAID())
-
-				System.out.println(b);
-
+			byte[] aid;
 			try {
-				channel = session.openLogicalChannel(applet.getAID());
+				aid = Utils.hexStringToByteArray(applet.getAID());
+				for (byte b : aid)
+					System.out.println(b);
+				channel = session.openLogicalChannel(aid);
 				// If the channel is opened we change the current selected
 				// applet
-				if (isResponseSucceded(channel.getSelectResponse()))
-					Configuration.currentApplet = applet;
+				if (ResponseHelper.isResponseSucceded(channel
+						.getSelectResponse()))
+					currentApplet = applet;
+				System.out.println("Return channel");
 				return channel;
-			} catch (SecurityException e) {
-				callback.onNoSecureElement();
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				throw new BadRequestException(e.getMessage());
+
 			}
+
 		}
 		throw new NoSuchElementException("No secure element present");
-
-	}
-
-	private byte[] getResponseCode(byte[] resp) {
-
-		return new byte[] { resp[resp.length - 2], resp[resp.length - 1] };
-
-	}
-
-	private boolean isResponseSucceded(byte[] resp) {
-
-		return ((resp[resp.length - 2] == (byte) 0x90) && (resp[resp.length - 1] == (byte) 0x00));
-
-	}
-
-	private boolean isPinRequired(byte[] resp) {
-
-		return ((resp[resp.length - 2] == (byte) 0x63) && (resp[resp.length - 1] == (byte) 0x01));
-
-	}
-
-	private String getResponseBody(byte[] resp) {
-
-		int size = 0;
-
-		byte[] response = new byte[resp.length - 2];
-
-		for (int i = 0; i < resp.length - 2; i++)
-
-			if (resp[i] != 0x00) {
-
-				response[size] = resp[i];
-
-				size++;
-
-			}
-
-		try {
-
-			return new String(response, 0, size, "UTF-8");
-
-		} catch (UnsupportedEncodingException e) {
-
-			e.printStackTrace();
-
-		}
-
-		return null;
 
 	}
 
