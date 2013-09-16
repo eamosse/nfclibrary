@@ -1,14 +1,18 @@
 package com.first.nfc.apduql;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class RequestParser {
 
-	public static byte[][] parseInsert(String commande)
-			throws BadRequestException {
+	public static Map <String, Object> parseInsert(String commande)
+			throws Exception {
+		commande = commande.replaceAll("\\s+", " ");
+		Map <String, Object> maps = new HashMap<String, Object>();
 		// insert into applet (ins1,ins2) values(value1,value2)
 		commande = commande.replaceAll("\\s+", " ");
 		checkRequiredWords(commande, "insert", "into", "values");
 		
-
 		// get the applet name
 		String appletName = nextWord(commande, "into");
 		String instructions = wordBetween(commande, appletName, "values");
@@ -29,13 +33,12 @@ public class RequestParser {
 		// Let's get the fields on wich the requested ins projected
 		instructions = instructions.replaceAll("\\s", "");
 		String[] tabInstructions = instructions.split(",");
-
+		maps.put("fields", tabInstructions);
 		// Let see if we have this applet in metadatas
 		Applet applet = Configuration.getAppletByName(appletName);
-
-		checkFieldsBelongToApplet(tabInstructions, applet);
-		if(!applet.getClasses().containsKey(Command.INSERT))
-			throw new BadRequestException("Request not supported! " + appletName + " doesn't support Insert command!" );
+		maps.put("applet", applet);
+		byte [] inst = checkFieldsBelongToApplet(tabInstructions, applet);
+		byte clazz = applet.getClazz(Command.INSERT);
 
 		// get the values to be inserted
 		int indexValues = commande.indexOf("values");
@@ -61,37 +64,36 @@ public class RequestParser {
 
 		byte[][] cmds = new byte[tabInstructions.length][];
 
-		for (String instruction : tabInstructions) {
-
+		for (String value : tabvalues) {
+int length = applet.getFieldLength(tabInstructions[iter]);
 			byte[] command = setCommand(
-					applet.getClasses().get(Command.INSERT), applet
-							.getInstructions().get(instruction),
-					tabvalues[iter], false);
+					clazz,inst[iter],
+					value, length);
 			cmds[iter] = command;
 			iter++;
 		}
-		return cmds;
+		maps.put("command", cmds);
+		return maps;
 
 	}
 
-	private static void checkFieldsBelongToApplet(String[] tabInstructions,
+	private static byte[] checkFieldsBelongToApplet(String[] tabInstructions,
 			Applet applet) throws BadRequestException {
 		// Let's be sure that we have informations about the fields on wich the
 		// request is projected on this applet
+		byte[] resp = new byte[tabInstructions.length];
+		int i =0; 
 		for (String field : tabInstructions) {
-			if (!applet.getInstructions().containsKey(field)) {
-				throw new BadRequestException(
-						"Request mal formated! Unknown field " + field
-								+ " in the applet " + applet.getNom());
-			}
+			resp[i]= applet.getInstruction(field);
+			i++;
 		}
+		return resp;
 	}
 
-	public static byte[][] parseSelect(String commande)
-			throws BadRequestException {
-
-		// select ins1, ins2 from applet where (ins1=abc and ins2=4562)
-
+	public static Map <String, Object> parseSelect(String commande)
+			throws Exception {
+		commande = commande.replaceAll("\\s+", " ");
+		Map <String, Object> maps = new HashMap<String, Object>();
 		checkRequiredWords(commande, "select", "from");
 
 		// the selected columns are between select and from
@@ -99,12 +101,14 @@ public class RequestParser {
 		// now lets get the applet name (the next word after from)
 		String appletName = nextWord(commande, "from");
 		Applet applet = Configuration.getAppletByName(appletName);
+		maps.put("applet", applet);
 		col = col.replaceAll("\\s", "");
 		String[] instructions = col.split(",");
+		maps.put("fields", instructions);
 		System.out.println("Instruction " + col);
-		checkFieldsBelongToApplet(instructions, applet);
-		if(!applet.getClasses().containsKey(Command.SELECT))
-			throw new BadRequestException("Request not supported! " + appletName + " doesn't support Select command!" );
+		byte [] inst = checkFieldsBelongToApplet(instructions, applet);
+		byte clazz = applet.getClazz(Command.SELECT);
+		
 		String[] whereValues = null;
 		int indexWhere = commande.indexOf("where");
 		if (indexWhere != -1) {
@@ -157,17 +161,19 @@ public class RequestParser {
 		}
 		int iter = 0;
 		byte[][] cmds = new byte[instructions.length][];
+		
 		for (String st : instructions) {
 			String data = null;
+			int length = applet.getFieldLength(st);
 			if (whereValues != null && (iter <= whereValues.length - 1))
 				data = whereValues[iter];
 			byte[] command = setCommand(
-					applet.getClasses().get(Command.SELECT), applet
-							.getInstructions().get(st), data, true);
+					clazz, inst[iter], data, length);
 			cmds[iter] = command;
 			iter++;
 		}
-		return cmds;
+		maps.put("command", cmds);
+		return maps;
 	}
 
 	private static String wordBetween(String string, String first, String second) {
@@ -203,7 +209,7 @@ public class RequestParser {
 
 	}
 
-	private static byte[] setCommand(byte CLA, byte INS, String data, boolean lc) {
+	private static byte[] setCommand(byte CLA, byte INS, String data, int lc) throws Exception {
 
 		System.out.println("Data : " + data);
 
@@ -211,7 +217,7 @@ public class RequestParser {
 
 		byte[] dataByte = null;
 
-		int lenght = lc ? 5 : 4;
+		int lenght =5;// lc!=0 ? 5 : 4;
 
 		if (hasData) {
 
@@ -223,19 +229,18 @@ public class RequestParser {
 
 		byte[] command = new byte[lenght];
 
-		command[0] = CLA;
+		command[0] = (byte)CLA;
 
-		command[1] = INS;
+		command[1] = (byte)INS;
 
 		command[2] = 0x00;
 
 		command[3] = 0x00;
 
-		if (lc)
+		command[command.length - 1] = Utils.hexStringToByteArray(Integer.toHexString(lc))[0];
 
-			command[command.length - 1] = 5;
-
-		System.out.println("Inst : " + INS);
+		System.out.println("Inst : " + CLA + " " + (byte)CLA);
+		System.out.println("Inst : " + INS + " " + (byte)INS);
 
 		if (hasData) {
 
