@@ -2,6 +2,8 @@ package com.first.nfc.apduql;
 
 import java.util.Map;
 
+import com.first.nfc.apduql.exceptions.ApduError;
+
 public interface ApduCallBack {
 	public abstract  void onNotConnected();
 	public abstract  void onConnected();

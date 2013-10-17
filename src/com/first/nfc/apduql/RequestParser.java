@@ -3,6 +3,8 @@ package com.first.nfc.apduql;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.first.nfc.apduql.exceptions.BadRequestException;
+
 public class RequestParser {
 
 	public static Map <String, Object> parseInsert(String commande)

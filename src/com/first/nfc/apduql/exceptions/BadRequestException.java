@@ -1,7 +1,7 @@
 /**
  * 
  */
-package com.first.nfc.apduql;
+package com.first.nfc.apduql.exceptions;
 
 /**
  * @author edou

@@ -2,15 +2,18 @@ package com.first.nfc.apduql;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 
 import org.simalliance.openmobileapi.Channel;
 import org.simalliance.openmobileapi.Reader;
 import org.simalliance.openmobileapi.SEService;
 import org.simalliance.openmobileapi.Session;
+
+import com.first.nfc.apduql.exceptions.ApduError;
+import com.first.nfc.apduql.exceptions.BadRequestException;
+import com.first.nfc.apduql.exceptions.NoReaderException;
+import com.first.nfc.apduql.exceptions.NoSecureElementException;
 
 import android.content.Context;
 
@@ -30,6 +33,7 @@ public class NfcController implements SEService.CallBack {
 		this.callback = callback;
 		this.context = context;
 		Configuration.FILEDIRECTORY = context.getFilesDir();
+		Configuration.context = context;
 	}
 
 	/**
@@ -77,8 +81,8 @@ public class NfcController implements SEService.CallBack {
 	}
 
 	public NfcController(Context context) {
-
 		this.context = context;
+		Configuration.context = context;
 
 	}
 
@@ -130,8 +134,8 @@ public class NfcController implements SEService.CallBack {
 	}
 
 	public void execute(final String command, final int commandId) {
-		new Thread(){
-			public void run(){
+		//new Thread(){
+			//public void run(){
 		Map<String, Object> maps = null;
 		try {
 
@@ -163,8 +167,8 @@ public class NfcController implements SEService.CallBack {
 			// TODO Auto-generated catch block
 			callback.onBadRequest(e.getMessage());
 		}
-			}
-		}.start();
+			//}
+		//}.start();
 	}
 
 	private void executeCommand(Map<String, Object> maps, int commandId)
@@ -195,6 +199,10 @@ public class NfcController implements SEService.CallBack {
 		for (int i = 0; i < commands.length; i++) {
 			byte[] command = commands[i];
 			byte[] resp = sendCommand(command);
+			System.out.println("Response");
+			for(byte b : resp){
+				System.out.println(b);
+			}
 			if (!ResponseHelper.isResponseSucceded(resp)) {
 				if (ResponseHelper.isPinRequired(resp)) {
 					callback.onPINRequired();
@@ -214,6 +222,7 @@ public class NfcController implements SEService.CallBack {
 			}
 		}
 		if (!isErrorOccurs) {
+			System.out.println("Response sending...........");
 			callback.onResponse(response, commandId);
 		}
 	}
